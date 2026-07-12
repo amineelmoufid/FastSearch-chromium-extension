@@ -1,0 +1,44 @@
+{
+  "manifest_version": 3,
+  "name": "FastSearch Overlay",
+  "version": "1.0.0",
+  "description": "Fast overlay search browser extension without leaving your current tab.",
+  "permissions": [
+    "storage",
+    "declarativeNetRequest",
+    "activeTab",
+    "contextMenus",
+    "clipboardRead"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "run_at": "document_end"
+    }
+  ],
+  "commands": {
+    "toggle-fast-search": {
+      "suggested_key": {
+        "default": "Alt+Shift+S",
+        "mac": "Alt+Shift+S"
+      },
+      "description": "Toggle the search overlay typing box"
+    }
+  },
+  "action": {
+    "default_title": "Toggle FastSearch Overlay"
+  },
+  "web_accessible_resources": [
+    {
+      "resources": ["styles.css"],
+      "matches": ["<all_urls>"]
+    }
+  ]
+}
