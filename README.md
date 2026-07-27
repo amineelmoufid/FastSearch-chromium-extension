@@ -7,6 +7,8 @@ Open a command palette modal directly on top of your current tab using a keyboar
 ## Key Features
 
 - **Keyboard Shortcut Toggle**: Press `Ctrl + Shift + Space` (or `Alt + Shift + S`) to open/close the overlay.
+- **0ms Zero-Delay Local Architecture**: The extension always opens instantly using local memory cache. It never blocks or waits for network requests when opening the search UI.
+- **Cloudflare Cross-Device Sync**: Synchronize search engines and prompts across all your browsers and devices seamlessly using a free Cloudflare Worker + KV backend.
 - **Sleek Glassmorphic Design**: Modern dark mode UI with backdrop blur filters, smooth scale/fade animations, and clean layouts that blend beautifully with any page.
 - **Instant Search Selection**: Select search engines using the Arrow keys and `Enter`, clicking the option, or using instant shortcut hotkeys (`Alt + 1` to `Alt + 9`).
 - **Direct URL Navigation**: Paste a direct link (e.g. `google.com` or `https://github.com`) and hit Enter to load the webpage directly in the popup, bypassing search engines.
@@ -32,6 +34,29 @@ Open a command palette modal directly on top of your current tab using a keyboar
 4. Click **Load unpacked** in the top-left corner.
 5. Select the cloned repository folder.
 6. The extension is now loaded and active! Open any standard webpage (e.g., [wikipedia.org](https://wikipedia.org)), click on the page to focus it, and press `Ctrl + Shift + Space`.
+
+## How Cloudflare Cross-Device Sync Works (0ms Delay)
+
+To keep all your devices synced without introducing network delays when opening the popup:
+1. **Local-First (0ms)**: The popup reads from local storage cache immediately upon keypress. Zero network waiting!
+2. **Background Stale-While-Revalidate**: On startup and periodically (every 15 mins), the background service worker checks your Cloudflare Worker URL for updates. If new engines are found, local cache updates quietly in the background.
+3. **Instant Auto-Push**: When you add/edit/reorder search engines in Settings, local storage updates instantly (0ms), and a background POST request uploads the changes to your Cloudflare Worker.
+
+### Deploying your Cloudflare Sync Worker
+
+1. Log in to your free [Cloudflare Dashboard](https://dash.cloudflare.com/) and go to **Workers & Pages** -> **Create Worker**.
+2. Copy the contents of [`worker.js`](file:///C:/Users/amine/Desktop/tools/FastSearch-chromium-extension/worker.js) into the Cloudflare Worker code editor.
+3. Create a **KV Namespace** named `FASTSEARCH_KV`:
+   - Go to **Workers & Pages** -> **KV**.
+   - Click **Create Namespace** and name it `FASTSEARCH_KV`.
+   - Go back to your Worker -> **Settings** -> **Variables** -> **KV Namespace Bindings**.
+   - Add a binding with Variable Name `FASTSEARCH_KV` linked to your KV namespace.
+4. *(Optional Secret Key)*: Under Worker Settings -> **Variables**, add an Environment Variable `SECRET_KEY` (e.g., `my_secret_token_123`).
+5. Click **Deploy**. Copy your deployed Worker URL (e.g., `https://fastsearch-sync.yourname.workers.dev`).
+6. In FastSearch Extension Settings (click ⚙️ inside the overlay):
+   - Enter your **Cloudflare Worker URL** and **Secret Auth Key** (if configured).
+   - Click **Save Sync Config**.
+   - Use **Push to Cloud** or **Pull from Cloud** anytime!
 
 ## How to Use Prompts
 

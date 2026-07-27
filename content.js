@@ -235,6 +235,30 @@
           <button class="btn btn-primary" id="fs-save-form-btn">Save</button>
         </div>
       </div>
+
+      <!-- Cloudflare Sync Configuration Form -->
+      <div class="settings-form" style="margin-top: 16px;">
+        <div class="settings-title-row">
+          <h3 class="settings-title">Cloudflare Cross-Device Sync</h3>
+        </div>
+        <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 8px; line-height: 1.4;">
+          Sync search engines across all your devices with 0ms local latency.
+        </div>
+        <div class="form-group">
+          <label class="form-label">Cloudflare Worker URL</label>
+          <input type="text" class="form-input" id="fs-cf-url" placeholder="e.g. https://fastsearch-sync.yourname.workers.dev">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Secret Auth Key (optional)</label>
+          <input type="password" class="form-input" id="fs-cf-secret" placeholder="Optional auth token / password">
+        </div>
+        <div class="form-error" id="fs-cf-status" style="display: none;"></div>
+        <div class="form-buttons" style="gap: 8px; margin-top: 8px;">
+          <button class="btn btn-secondary" id="fs-cf-pull-btn">Pull from Cloud</button>
+          <button class="btn btn-secondary" id="fs-cf-push-btn">Push to Cloud</button>
+          <button class="btn btn-primary" id="fs-cf-save-btn">Save Sync Config</button>
+        </div>
+      </div>
     `;
 
     settingsView.innerHTML = `
@@ -312,6 +336,73 @@
     const formTitle = settingsView.querySelector("#fs-form-title");
     const formError = settingsView.querySelector("#fs-form-error");
 
+    // Cloudflare Form Selectors
+    const cfUrlInput = settingsView.querySelector("#fs-cf-url");
+    const cfSecretInput = settingsView.querySelector("#fs-cf-secret");
+    const cfStatusEl = settingsView.querySelector("#fs-cf-status");
+    const cfPullBtn = settingsView.querySelector("#fs-cf-pull-btn");
+    const cfPushBtn = settingsView.querySelector("#fs-cf-push-btn");
+    const cfSaveBtn = settingsView.querySelector("#fs-cf-save-btn");
+
+    // Populate Cloudflare Sync Config values
+    chrome.storage.sync.get(["cfSyncUrl", "cfSecretKey", "cfLastSynced"]).then(cfg => {
+      if (cfg.cfSyncUrl) cfUrlInput.value = cfg.cfSyncUrl;
+      if (cfg.cfSecretKey) cfSecretInput.value = cfg.cfSecretKey;
+      if (cfg.cfLastSynced) {
+        const timeStr = new Date(cfg.cfLastSynced).toLocaleTimeString();
+        showCfStatus(`Last synced: ${timeStr}`, "info");
+      }
+    });
+
+    function showCfStatus(msg, type = "error") {
+      if (!msg) {
+        cfStatusEl.style.display = "none";
+        cfStatusEl.textContent = "";
+        return;
+      }
+      cfStatusEl.textContent = msg;
+      cfStatusEl.className = type === "success" ? "form-success" : type === "info" ? "form-info" : "form-error";
+      cfStatusEl.style.display = "block";
+    }
+
+    // Save local engines and auto-push to Cloudflare in background
+    async function saveEnginesLocally(updatedEngines) {
+      await chrome.storage.sync.set({ searchEngines: updatedEngines });
+      // Non-blocking background auto-push to Cloudflare Worker
+      chrome.runtime.sendMessage({ action: "cf-auto-push", engines: updatedEngines }).catch(() => {});
+    }
+
+    cfSaveBtn.addEventListener("click", async () => {
+      const url = cfUrlInput.value.trim();
+      const secret = cfSecretInput.value.trim();
+      await chrome.storage.sync.set({ cfSyncUrl: url, cfSecretKey: secret });
+      showCfStatus("Cloudflare Sync settings saved!", "success");
+    });
+
+    cfPullBtn.addEventListener("click", async () => {
+      showCfStatus("Pulling from Cloudflare...", "info");
+      chrome.runtime.sendMessage({ action: "cf-pull" }, async (res) => {
+        if (res && res.success) {
+          await loadEngines();
+          showCfStatus(`Successfully pulled ${res.enginesCount || engines.length} engines!`, "success");
+          renderSettings();
+        } else {
+          showCfStatus(`Pull failed: ${res ? (res.error || res.reason) : "Unknown error"}`, "error");
+        }
+      });
+    });
+
+    cfPushBtn.addEventListener("click", async () => {
+      showCfStatus("Pushing to Cloudflare...", "info");
+      chrome.runtime.sendMessage({ action: "cf-push" }, (res) => {
+        if (res && res.success) {
+          showCfStatus("Successfully pushed engines to Cloudflare!", "success");
+        } else {
+          showCfStatus(`Push failed: ${res ? res.error : "Unknown error"}`, "error");
+        }
+      });
+    });
+
     function showError(msg) {
       if (msg) {
         formError.textContent = msg;
@@ -365,7 +456,7 @@
         engines.push({ id, name, url, prompt });
       }
 
-      await chrome.storage.sync.set({ searchEngines: engines });
+      await saveEnginesLocally(engines);
       resetForm();
       renderSettings();
     });
@@ -403,7 +494,7 @@
     deleteConfirmBtn.addEventListener("click", async () => {
       if (deleteIndex >= 0) {
         engines.splice(deleteIndex, 1);
-        await chrome.storage.sync.set({ searchEngines: engines });
+        await saveEnginesLocally(engines);
         confirmOverlay.classList.remove("active");
         deleteIndex = -1;
         renderSettings();
@@ -417,7 +508,7 @@
           const temp = engines[idx];
           engines[idx] = engines[idx - 1];
           engines[idx - 1] = temp;
-          await chrome.storage.sync.set({ searchEngines: engines });
+          await saveEnginesLocally(engines);
           renderSettings();
         }
       });
@@ -430,7 +521,7 @@
           const temp = engines[idx];
           engines[idx] = engines[idx + 1];
           engines[idx + 1] = temp;
-          await chrome.storage.sync.set({ searchEngines: engines });
+          await saveEnginesLocally(engines);
           renderSettings();
         }
       });
@@ -522,6 +613,10 @@
   async function openOverlay(initialQuery = "") {
     console.log("FastSearch Content Script: Opening overlay...");
     await loadEngines();
+    
+    // Non-blocking background Cloudflare sync check (0ms UI delay)
+    chrome.runtime.sendMessage({ action: "cf-pull" }).catch(() => {});
+
     backdrop.style.display = "flex";
     backdrop.offsetHeight; // force reflow
     backdrop.classList.add("active");

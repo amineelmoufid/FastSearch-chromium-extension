@@ -8,7 +8,8 @@
     "declarativeNetRequest",
     "activeTab",
     "contextMenus",
-    "clipboardRead"
+    "clipboardRead",
+    "alarms"
   ],
   "host_permissions": [
     "<all_urls>"
@@ -33,7 +34,13 @@
     }
   },
   "action": {
-    "default_title": "Toggle FastSearch Overlay"
+    "default_title": "Toggle FastSearch Overlay",
+    "default_icon": "icon.png"
+  },
+  "icons": {
+    "16": "icon.png",
+    "48": "icon.png",
+    "128": "icon.png"
   },
   "web_accessible_resources": [
     {

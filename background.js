@@ -94,7 +94,102 @@ async function updateRulesInternal() {
 }
 
 
-// Initialize rules on startup/install
+// Cloudflare Synchronization Logic (Background Stale-While-Revalidate)
+
+async function syncFromCloudflare() {
+  try {
+    const { cfSyncUrl, cfSecretKey, searchEngines, cfLastUpdated } = await chrome.storage.sync.get([
+      "cfSyncUrl", "cfSecretKey", "searchEngines", "cfLastUpdated"
+    ]);
+    if (!cfSyncUrl) return { success: false, reason: "No Cloudflare URL configured" };
+
+    const headers = {};
+    if (cfSecretKey) {
+      headers["Authorization"] = `Bearer ${cfSecretKey}`;
+    }
+
+    const res = await fetch(cfSyncUrl, { method: "GET", headers });
+    if (!res.ok) {
+      const errText = await res.text();
+      return { success: false, error: `HTTP ${res.status}: ${errText}` };
+    }
+
+    const data = await res.json();
+    if (data && Array.isArray(data.engines)) {
+      const remoteUpdated = data.updatedAt || 0;
+      const localUpdated = cfLastUpdated || 0;
+
+      // Update local cache quietly if remote has data and is newer or different
+      if (remoteUpdated > localUpdated || (data.engines.length > 0 && JSON.stringify(data.engines) !== JSON.stringify(searchEngines))) {
+        await chrome.storage.sync.set({
+          searchEngines: data.engines,
+          cfLastUpdated: remoteUpdated || Date.now(),
+          cfLastSynced: Date.now()
+        });
+        console.log("FastSearch Background: Cloudflare pull updated local storage successfully.");
+        return { success: true, updated: true, enginesCount: data.engines.length, updatedAt: remoteUpdated };
+      }
+      return { success: true, updated: false, enginesCount: (searchEngines || []).length };
+    }
+    return { success: false, error: "Invalid data format received from Cloudflare Worker" };
+  } catch (err) {
+    console.error("FastSearch Background: Cloudflare pull error:", err);
+    return { success: false, error: err.message };
+  }
+}
+
+async function pushToCloudflare(enginesOverride = null) {
+  try {
+    const { cfSyncUrl, cfSecretKey, searchEngines } = await chrome.storage.sync.get([
+      "cfSyncUrl", "cfSecretKey", "searchEngines"
+    ]);
+    if (!cfSyncUrl) return { success: false, error: "Cloudflare Sync URL not configured" };
+
+    const engines = enginesOverride || searchEngines || DEFAULT_ENGINES;
+    const headers = { "Content-Type": "application/json" };
+    if (cfSecretKey) {
+      headers["Authorization"] = `Bearer ${cfSecretKey}`;
+    }
+
+    const updatedAt = Date.now();
+    const payload = {
+      engines,
+      updatedAt
+    };
+
+    const res = await fetch(cfSyncUrl, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(payload)
+    });
+
+    if (res.ok) {
+      await chrome.storage.sync.set({ cfLastUpdated: updatedAt, cfLastSynced: Date.now() });
+      console.log("FastSearch Background: Cloudflare push successful.");
+      return { success: true, updatedAt };
+    } else {
+      const errText = await res.text();
+      return { success: false, error: `HTTP ${res.status}: ${errText}` };
+    }
+  } catch (err) {
+    console.error("FastSearch Background: Cloudflare push error:", err);
+    return { success: false, error: err.message };
+  }
+}
+
+// Setup periodic alarm for background sync (every 15 minutes)
+try {
+  chrome.alarms.create("fastsearch-cf-sync-alarm", { periodInMinutes: 15 });
+  chrome.alarms.onAlarm.addListener((alarm) => {
+    if (alarm.name === "fastsearch-cf-sync-alarm") {
+      syncFromCloudflare();
+    }
+  });
+} catch (e) {
+  console.log("Alarms registration notice:", e);
+}
+
+// Initialize rules and Cloudflare sync on startup/install
 chrome.runtime.onInstalled.addListener(async () => {
   // Save default engines if not already present
   const result = await chrome.storage.sync.get(["searchEngines"]);
@@ -102,6 +197,7 @@ chrome.runtime.onInstalled.addListener(async () => {
     await chrome.storage.sync.set({ searchEngines: DEFAULT_ENGINES });
   }
   await updateRules();
+  syncFromCloudflare();
 
   // Create right-click context menu item for selected text
   chrome.contextMenus.create({
@@ -128,6 +224,7 @@ chrome.runtime.onInstalled.addListener(async () => {
 
 chrome.runtime.onStartup.addListener(async () => {
   await updateRules();
+  syncFromCloudflare();
 });
 
 // Update rules when storage changes
@@ -188,6 +285,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.url) {
       chrome.tabs.create({ url: message.url });
     }
+  } else if (message.action === "cf-pull") {
+    syncFromCloudflare().then(sendResponse);
+    return true; // keep async channel open
+  } else if (message.action === "cf-push") {
+    pushToCloudflare().then(sendResponse);
+    return true; // keep async channel open
+  } else if (message.action === "cf-auto-push") {
+    pushToCloudflare(message.engines).then(sendResponse);
+    return true;
   }
 });
 
@@ -211,3 +317,4 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
     }
   }
 });
+
