@@ -1,0 +1,7 @@
+name = "fastsearch-sync"
+main = "worker.js"
+compatibility_date = "2024-01-01"
+
+kv_namespaces = [
+  { binding = "FASTSEARCH_KV", id = "72c77dab48af4268a8c5a60b17317687" }
+]
