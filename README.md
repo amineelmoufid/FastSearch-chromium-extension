@@ -7,6 +7,7 @@ Open a command palette modal directly on top of your current tab using a keyboar
 ## Key Features
 
 - **Keyboard Shortcut Toggle**: Press `Ctrl + Shift + Space` (or `Alt + Shift + S`) to open/close the overlay.
+- **Shortcut Selection Pre-fill**: Highlight any text on a webpage and press the keyboard shortcut (`Ctrl + Shift + Space` or `Alt + Shift + S`) to instantly open the search overlay pre-filled and focused on your selection.
 - **0ms Zero-Delay Local Architecture**: The extension always opens instantly using local memory cache. It never blocks or waits for network requests when opening the search UI.
 - **Cloudflare Cross-Device Sync**: Synchronize search engines and prompts across all your browsers and devices seamlessly using a free Cloudflare Worker + KV backend.
 - **Sleek Glassmorphic Design**: Modern dark mode UI with backdrop blur filters, smooth scale/fade animations, and clean layouts that blend beautifully with any page.

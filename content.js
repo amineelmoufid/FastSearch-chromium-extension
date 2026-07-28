@@ -644,6 +644,17 @@
     }, 250);
   }
 
+  // Extract any text selected on the active webpage
+  function getActivePageSelection() {
+    try {
+      const sel = window.getSelection();
+      if (sel) {
+        return sel.toString().trim();
+      }
+    } catch (_) {}
+    return "";
+  }
+
   // Clear query button visibility handler
   function handleSearchInputChanged() {
     if (searchInput.value.length > 0) {
@@ -662,7 +673,8 @@
       if (backdrop.classList.contains("active")) {
         closeOverlay();
       } else {
-        openOverlay();
+        const selectedText = getActivePageSelection();
+        openOverlay(selectedText);
       }
     } else if (message.action === "open-with-query") {
       openOverlay(message.query);
@@ -829,7 +841,8 @@
       if (backdrop.classList.contains("active")) {
         closeOverlay();
       } else {
-        openOverlay();
+        const selectedText = getActivePageSelection();
+        openOverlay(selectedText);
       }
     }
   }, true);
