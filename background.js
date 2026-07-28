@@ -238,7 +238,7 @@ chrome.storage.onChanged.addListener(async (changes, namespace) => {
 async function toggleOverlayOnActiveTab() {
   console.log("FastSearch Background: toggleOverlayOnActiveTab called");
   try {
-    const [activeTab] = await chrome.tabs.query({ activeTab: true, currentWindow: true });
+    const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
     if (!activeTab) {
       console.log("FastSearch Background: No active tab found.");
       return;
